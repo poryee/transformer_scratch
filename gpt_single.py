@@ -41,7 +41,9 @@ print(text[:1000])
 # here are all the unique characters that occur in this text
 chars = sorted(list(set(text)))
 vocab_size = len(chars)
+# unique 64 char
 print(''.join(chars))
+# count
 print(vocab_size)
 
 # create a mapping from characters to integers
@@ -53,8 +55,10 @@ encode = lambda s: [stoi[c] for c in s] # encoder: take a string, output a list 
 decode = lambda l: ''.join([itos[i] for i in l]) # decoder: take a list of integers, output a string
 
 data = torch.tensor(encode(text), dtype=torch.long)
+# data shape
 print(data.shape, data.dtype)
-print(data[:1000]) # the 1000 characters we looked at earier will to the GPT look like this
+# the 1000 characters we looked at earier will to the GPT look like this
+print(data[:1000])
 
 # Let's now split up the data into train and validation sets
 n = int(0.9*len(data)) # first 90% will be train, rest val
@@ -86,6 +90,31 @@ def get_batch(split):
     x, y = x.to(device), y.to(device)
     return x, y
 
+# self attention head
+class Head(nn.Module):
+
+    def __init__(self, head_size):
+        # init nn module
+        super().__init__()
+        # masking/filter on input so model can learn different information that has high affinity
+        self.key = nn.Linear(n_embd, head_size, bias=False)
+        self.query= nn.Linear(n_embd, head_size, bias=False)
+        self.value = nn.Linear(n_embd, head_size, bias=False)
+        self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
+
+    def forward(self, x):
+        B,T,C = x.shape
+        k = self.key(x)   # (B,T,C)
+        q = self.query(x) # (B,T,C)
+        # compute attention scores ("affinities")
+        wei = q @ k.transpose(-2,-1) * C**-0.5 # (B, T, C) @ (B, C, T) -> (B, T, T)
+        wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf')) # (B, T, T)
+        wei = F.softmax(wei, dim=-1) # (B, T, T)
+        #wei = self.dropout(wei)
+        # perform the weighted aggregation of the values
+        v = self.value(x) # (B,T,C)
+        out = wei @ v # (B, T, T) @ (B, T, C) -> (B, T, C)
+        return out
 
 class BigramLanguageModel(nn.Module):
 
@@ -94,6 +123,9 @@ class BigramLanguageModel(nn.Module):
         # each token directly reads off the logits for the next token from a lookup table
         self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
         self.position_embedding_table = nn.Embedding(block_size, n_embd)
+
+        # add sa head
+        self.sa_head = Head(n_embd)
 
         # final layer that maps back to vocab size for all possible output to be decoded
         self.lm_head = nn.Linear(n_embd, vocab_size)
@@ -109,7 +141,11 @@ class BigramLanguageModel(nn.Module):
 
         # combine embedding with positional information
         x = tok_emb + pos_emb
+        # single head
+        x= self.sa_head(x)
+
         # multi head implementation and layer norm
+
         #x = self.blocks(x) # (B,T,C)
         #x = self.ln_f(x) # (B,T,C)
         logits = self.lm_head(x)
@@ -170,7 +206,9 @@ for iter in range(max_iters): # increase number of steps for good results...
     loss.backward()
     optimizer.step()
 
-#print(loss.item())
+# 2.5 loss with just tok and pos emb
+# 2.27 loss with single self attention head
+print(loss.item())
 # generate from the model
 context = torch.zeros((1, 1), dtype=torch.long, device=device)
 print(decode(m.generate(context, max_new_tokens=2000)[0].tolist()))
