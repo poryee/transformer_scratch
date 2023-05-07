@@ -166,6 +166,7 @@ class BigramLanguageModel(nn.Module):
         # idx is (B, T) array of indices in the current context
         for _ in range(max_new_tokens):
             # crop idx to the last block_size tokens
+            # sliding window cause positional emb is based on block side if not will index out of bound
             idx_cond = idx[:, -block_size:]
             # get the predictions
             logits, loss = self(idx_cond)

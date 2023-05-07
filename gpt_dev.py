@@ -184,7 +184,7 @@ print(c)
 # consider the following toy example:
 
 torch.manual_seed(1337)
-B,T,C = 4,8,2 # batch, time, channels
+B,T,C = 4,8,5 # batch, time, channels
 x = torch.randn(B,T,C)
 x.shape
 
